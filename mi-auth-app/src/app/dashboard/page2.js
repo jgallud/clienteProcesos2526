@@ -1,150 +1,101 @@
 "use client";
-import React, { useEffect, useState } from 'react';
-import { LogOut, User, LayoutDashboard, ShieldCheck } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useSocket } from '@/context/SocketContext';
+import { useState, useEffect, useContext } from 'react';
+import { SocketContext } from '@/context/SocketContext';
 
 export default function DashboardPage() {
-    const [userEmail, setUserEmail] = useState("");
-    const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-    const [user, setUser] = useState(null);
+    const { socket } = useContext(SocketContext);
+    const [userEmail, setUserEmail] = useState('');
     const [loading, setLoading] = useState(true);
-    const router = useRouter();
-    const socket = useSocket();
+    
+    // Estados de la lógica de juego
     const [codigoPartida, setCodigoPartida] = useState('');
-    const [inputCodigo, setInputCodigo] = useState('');
     const [listaPartidas, setListaPartidas] = useState([]);
     const [enJuego, setEnJuego] = useState(false);
-    const [toastMsg, setToastMsg] = useState(null);
+    const [inputCodigo, setInputCodigo] = useState('');
 
     useEffect(() => {
-        const comprobarAcceso = async () => {
+        // 1. Verificar sesión al cargar
+        const checkSession = async () => {
             try {
-                const res = await fetch(`${API_URL}/dashboard?t=${new Date().getTime()}`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    cache: 'no-store',
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/verificarSesion`, {
+                    credentials: 'include'
                 });
-
                 if (res.ok) {
                     const data = await res.json();
-
-                    // 1. Usa los datos que vienen del servidor, son más fiables que la cookie
-                    setUser(data.user);
-                    // data.user debería traer el email o nick si lo configuraste en el back
-                    setUserEmail(data.user.email || data.user.nick || "");
-                    const nickDesdeCookie = document.cookie
-                        .split('; ')
-                        .find(row => row.startsWith('nick='))
-                        ?.split('=')[1];
-
-                    setUserEmail(decodeURIComponent(nickDesdeCookie || data.user.email));
-                    //setLoading(false);
-                    // 2. SOLO ahora permitimos ver el dashboard
-                    setLoading(false);
-                    // --- AQUÍ CONECTAMOS EL SOCKET ---
-                    // Solo cuando sabemos que el usuario es válido
-
+                    setUserEmail(data.email);
                 } else {
-                    // Si no es OK (401), mandamos al login y NO quitamos el loading
-                    router.push('/');
+                    window.location.href = '/';
                 }
             } catch (error) {
                 console.error("Error verificando sesión", error);
-                router.push('/');
+            } finally {
+                setLoading(false);
             }
         };
+        checkSession();
+    }, []);
 
-        comprobarAcceso();
-    }, [router, socket]);
-    // --- NUEVO EFFECT: ESCUCHA DE EVENTOS ---
-    // Este useEffect se encarga solo de "oír" lo que dice el servidor
     useEffect(() => {
         if (!socket) return;
-        socket.on('partidaCreada', (codigo) => {
-            setCodigoPartida(codigo.codigo);
-            setEnJuego(true);
-        });
 
-        socket.on('errorPartida', (msj) => alert(msj));
-
-        socket.on('actualizarListaPartidas', (partidas) => {
-            console.log("Lista de partidas recibida:", partidas);
-            // 'partidas' debe ser un array de objetos o strings
-            setListaPartidas(partidas);
+        // 2. Listeners de Socket.io
+        socket.on('partidaCreada', (data) => {
+            const codigo = typeof data === 'object' ? data.codigo : data;
+            setCodigoPartida(codigo);
+            setListaPartidas([]); // Limpiamos lista al crear
         });
 
         socket.on('unidoAPartida', (data) => {
-            console.log("Te has unido con éxito:", data);
-            // 1. Extraemos el código (manejando si viene como objeto o string)
             const codigo = typeof data === 'object' ? data.codigo : data;
-            // 2. Actualizamos el estado para que la UI cambie
             setCodigoPartida(codigo);
-            // 3. (Opcional) Aquí podrías redirigir al usuario a la pantalla del juego
-            // router.push(`/dashboard/partida/${codigo}`);
+            setListaPartidas([]); // Limpiamos lista al unirnos
         });
 
-        socket.on('iniciarPartida', (data) => {
-            setListaPartidas([]);
+        socket.on('iniciarPartida', (datos) => {
+            console.log("Iniciando juego...", datos);
             setEnJuego(true);
-        });
-
-        socket.on('partidaAbandonada', (data) => {
-            //console.log("Partida abandonada:", data);
-            //console.log("Usuario que abandonó:", userEmail);
-            if (data.id !== socket.id) {
-                setToastMsg('El otro jugador ha abandonado la partida');
-            }
-            // Volvemos al dashboard inicial
-            setEnJuego(false);
-            setCodigoPartida('');
-            setInputCodigo('');
             setListaPartidas([]);
         });
 
+        socket.on('actualizarListaPartidas', (partidas) => {
+            // Solo actualizamos si no estamos ya en una partida
+            if (!codigoPartida && !enJuego) {
+                setListaPartidas(partidas);
+            }
+        });
+
+        socket.on('errorPartida', (msj) => {
+            alert(msj);
+        });
 
         return () => {
             socket.off('partidaCreada');
-            socket.off('errorPartida');
-            socket.off('actualizarListaPartidas');
             socket.off('unidoAPartida');
-            socket.off('iniciarPartidas');
-            socket.off('partidaAbandonada');
+            socket.off('iniciarPartida');
+            socket.off('actualizarListaPartidas');
+            socket.off('errorPartida');
         };
-    }, [socket]);
+    }, [socket, codigoPartida, enJuego]);
 
-    // --- MÉTODOS PARA TUS BOTONES ---
+    // 3. Funciones de acción
     const crear = () => {
         socket.emit('crearPartida', { email: userEmail });
     };
 
-    const unir = (codigoInput) => {
-        socket.emit('unirAPartida', { email: userEmail, codigo: codigoInput });
+    const unir = (codigo) => {
+        const c = codigo || inputCodigo;
+        if (!c) return alert("Código necesario");
+        socket.emit('unirAPartida', { email: userEmail, codigo: c.toUpperCase() });
     };
 
     const abandonar = () => {
-        if (socket) {
-            socket.emit('abandonarPartida', {
-                email: userEmail,
-                codigo: codigoPartida
-            });
-            setCodigoPartida(''); // Limpiamos el código en el front
-            // setStatusMsj('Has abandonado la partida'); // Opcional si tienes este estado
-        }
+        socket.emit('abandonarPartida', { email: userEmail, codigo: codigoPartida });
+        setCodigoPartida('');
+        setEnJuego(false);
+        socket.emit('pedirListaPartidas');
     };
-    // ... (Todo tu código anterior de useEffects y funciones)
-    useEffect(() => {
-        if (!toastMsg) return;
 
-        const timeout = setTimeout(() => {
-            setToastMsg(null);
-        }, 2000);
-
-        return () => clearTimeout(timeout);
-    }, [toastMsg]);
-
-    if (loading) return <div className="p-10 text-center">Verificando sesión...</div>;
+    if (loading) return <div className="p-10 text-center font-mono">Cargando sistema...</div>;
 
     return (
         <div className="max-w-5xl mx-auto animate-in fade-in duration-700">
@@ -152,7 +103,7 @@ export default function DashboardPage() {
             <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 tracking-tighter uppercase">
-                        {enJuego ? "🕹️ En Partida" : "🌐 Control de Partidas"}
+                        {enJuego ? "🕹️ En Partida" : "🌐 Lobby Principal"}
                     </h1>
                     <p className="text-gray-500 text-sm font-medium">{userEmail}</p>
                 </div>
@@ -175,7 +126,7 @@ export default function DashboardPage() {
                         <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
                             <h2 className="text-xl font-bold mb-4">Nueva Partida</h2>
                             <p className="text-gray-500 mb-6 text-sm">Crea una sala privada y espera a que otros se unan.</p>
-                            <button
+                            <button 
                                 onClick={crear}
                                 disabled={!!codigoPartida}
                                 className={`w-full py-4 rounded-xl font-bold transition-all ${codigoPartida ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 shadow-lg'}`}
@@ -188,14 +139,14 @@ export default function DashboardPage() {
                         <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
                             <h2 className="text-xl font-bold mb-4">Unirse con Código</h2>
                             <div className="flex gap-2">
-                                <input
-                                    type="text"
+                                <input 
+                                    type="text" 
                                     placeholder="EJ: AB1234"
                                     value={inputCodigo}
                                     onChange={(e) => setInputCodigo(e.target.value)}
                                     className="flex-1 bg-gray-50 border-none rounded-xl px-4 font-mono font-bold focus:ring-2 focus:ring-indigo-500"
                                 />
-                                <button
+                                <button 
                                     onClick={() => unir()}
                                     className="bg-gray-900 text-white px-6 py-4 rounded-xl font-bold hover:bg-black transition-colors"
                                 >
@@ -227,7 +178,7 @@ export default function DashboardPage() {
                                         return (
                                             <div key={idx} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-indigo-300 transition-colors">
                                                 <span className="font-mono font-bold text-lg text-gray-700">{codigo}</span>
-                                                <button
+                                                <button 
                                                     onClick={() => unir(codigo)}
                                                     className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg font-bold text-sm group-hover:bg-indigo-600 group-hover:text-white transition-all"
                                                 >
@@ -245,9 +196,9 @@ export default function DashboardPage() {
                 /* VISTA JUEGO ACTIVO */
                 <div className="bg-gray-900 rounded-[3rem] p-12 min-h-[400px] flex flex-col items-center justify-center border-[12px] border-gray-800 shadow-2xl relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-
+                    
                     <h2 className="text-white text-3xl font-black mb-8 z-10">EL JUEGO HA COMENZADO</h2>
-
+                    
                     {/* Placeholder del Tablero */}
                     <div className="w-64 h-64 bg-gray-800 rounded-2xl border-4 border-indigo-500/30 flex items-center justify-center z-10">
                         <p className="text-indigo-400 font-mono text-xs animate-pulse text-center p-4">
@@ -255,7 +206,7 @@ export default function DashboardPage() {
                         </p>
                     </div>
 
-                    <button
+                    <button 
                         onClick={abandonar}
                         className="mt-12 text-gray-400 hover:text-red-400 font-bold transition-colors z-10"
                     >
@@ -263,13 +214,6 @@ export default function DashboardPage() {
                     </button>
                 </div>
             )}
-            {/* 🔔 TOAST */}
-            {toastMsg && (
-                <div className="fixed top-6 right-6 z-50 bg-gray-900 text-white px-6 py-3 rounded-xl shadow-xl animate-in fade-in duration-300">
-                    {toastMsg}
-                </div>
-            )}
         </div>
-
     );
 }
