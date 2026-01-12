@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { Mail, Lock, LogIn, UserPlus, X } from 'lucide-react';
+import toast from "react-hot-toast";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -27,18 +28,18 @@ export default function AuthPage() {
         body: JSON.stringify(formData),
         credentials: 'include'
       });
-
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (res.ok && data.user!=-1) {
+        //const data = await res.json();
         //alert(isLogin ? '¡Inicio de sesión exitoso!' : 'Cuenta creada correctamente');
         window.location.href = '/dashboard';
         console.log('Respuesta:', data);
       } else {
-        alert('Error en la autenticación. Revisa tus datos.');
+        toast('Error en la autenticación. Revisa tus datos.');
       }
     } catch (error) {
       console.error('Error de red:', error);
-      alert('No se pudo conectar con el servidor.');
+      toast('No se pudo conectar con el servidor.');
     }
   };
 

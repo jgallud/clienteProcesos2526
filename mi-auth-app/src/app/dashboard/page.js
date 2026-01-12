@@ -1,8 +1,13 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import { LogOut, User, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { toast } from "react-hot-toast";
 import { useRouter } from 'next/navigation';
 import { useSocket } from '@/context/SocketContext';
+import GoBoard from "./GoBoard";
+import GoBoardIA from "./GoBoardIA";
+import { mejorJugadaIA } from "@/game/ia";
+import { simularJugada } from "@/game/goUtils";
 
 export default function DashboardPage() {
     const [userEmail, setUserEmail] = useState("");
@@ -17,6 +22,69 @@ export default function DashboardPage() {
     const [listaPartidas, setListaPartidas] = useState([]);
     const [enJuego, setEnJuego] = useState(false);
     const [toastMsg, setToastMsg] = useState(null);
+    const [partidaLista, setPartidaLista] = useState(false);
+    const [estadoPartida, setEstadoPartida] = useState({
+        tablero: Array(9).fill(null).map(() => Array(9).fill(0)),
+        turno: "black"
+    });
+    const [miColor, setMiColor] = useState("black"); // asignado al crear/unir
+    // estado del juego local vs IA
+    const [enJuegoIA, setEnJuegoIA] = useState(false);
+    const [estadoIA, setEstadoIA] = useState({
+        tablero: Array(9).fill(null).map(() => Array(9).fill(0)), // 9x9 vacío
+        turno: "1", // o blanco dependiendo de la convención
+        capturas: { negro: 0, blanco: 0 },
+    });
+
+    const [modoJuego, setModoJuego] = useState(null); // null | 'ONLINE' | 'IA'
+
+
+    function colocarPiedraHumano(y, x) {
+        setEstadoIA(prev => {
+            if (prev.turno !== 1) return prev;
+
+            const sim = simularJugada(prev.tablero, y, x, 1);
+            if (!sim.valida) return prev;
+
+            return {
+                ...prev,
+                tablero: sim.tablero,
+                turno: 2,
+                capturas: {
+                    ...prev.capturas,
+                    negro: prev.capturas.negro + sim.capturas
+                }
+            };
+        });
+
+        setTimeout(colocarPiedraIA, 400);
+    }
+
+    function colocarPiedraIA() {
+        setEstadoIA(prev => {
+            if (prev.turno !== 2) return prev;
+
+            const jugada = mejorJugadaIA(prev.tablero);
+            if (!jugada) return prev;
+
+            const [y, x] = jugada;
+            const sim = simularJugada(prev.tablero, y, x, 2);
+
+            return {
+                ...prev,
+                tablero: sim.tablero,
+                turno: 1,
+                capturas: {
+                    ...prev.capturas,
+                    blanco: prev.capturas.blanco + sim.capturas
+                }
+            };
+        });
+    }
+
+
+
+
 
     useEffect(() => {
         const comprobarAcceso = async () => {
@@ -62,8 +130,10 @@ export default function DashboardPage() {
     // Este useEffect se encarga solo de "oír" lo que dice el servidor
     useEffect(() => {
         if (!socket) return;
-        socket.on('partidaCreada', (codigo) => {
-            setCodigoPartida(codigo.codigo);
+        socket.on('partidaCreada', (datos) => {
+            console.log("Socketon partidaCreada datos:", datos);
+            setCodigoPartida(datos.codigo);
+            setMiColor(datos.color);
             setEnJuego(true);
         });
 
@@ -81,6 +151,7 @@ export default function DashboardPage() {
             const codigo = typeof data === 'object' ? data.codigo : data;
             // 2. Actualizamos el estado para que la UI cambie
             setCodigoPartida(codigo);
+            setMiColor(data.color);
             // 3. (Opcional) Aquí podrías redirigir al usuario a la pantalla del juego
             // router.push(`/dashboard/partida/${codigo}`);
         });
@@ -88,6 +159,30 @@ export default function DashboardPage() {
         socket.on('iniciarPartida', (data) => {
             setListaPartidas([]);
             setEnJuego(true);
+            setPartidaLista(true);
+            //setEstadoPartida(data);
+            setEstadoPartida({ tablero: data.tablero, turno: data.turno });
+            //setMiColor(data.miColor);
+        });
+
+        // Actualizar estado del tablero
+        socket.on("estadoPartida", (data) => {
+            setEstadoPartida({ tablero: data.tablero, turno: data.turno });
+        });
+
+        socket.on("jugadaRealizada", (estado) => {
+            const nuevoTablero = estado.tablero.map(f => [...f]);
+            setEstadoPartida({ ...estado, tablero: nuevoTablero });
+        });
+
+        // Jugada inválida (opcional: toast)
+        socket.on("jugadaInvalida", ({ motivo }) => {
+            if (motivo === "NO_TU_TURNO") {
+                toast("No es tu turno");
+            }
+            if (motivo === "CASILLA_OCUPADA") {
+                toast("Esa casilla ya está ocupada");
+            }
         });
 
         socket.on('partidaAbandonada', (data) => {
@@ -101,6 +196,11 @@ export default function DashboardPage() {
             setCodigoPartida('');
             setInputCodigo('');
             setListaPartidas([]);
+            setMiColor("");
+            setEstadoPartida({
+                tablero: Array(9).fill(Array(9).fill(null)),
+                turno: null
+            });
         });
 
 
@@ -109,8 +209,10 @@ export default function DashboardPage() {
             socket.off('errorPartida');
             socket.off('actualizarListaPartidas');
             socket.off('unidoAPartida');
-            socket.off('iniciarPartidas');
+            socket.off('iniciarPartida');
             socket.off('partidaAbandonada');
+            socket.off("estadoPartida");
+            socket.off("jugadaInvalida");
         };
     }, [socket]);
 
@@ -123,16 +225,49 @@ export default function DashboardPage() {
         socket.emit('unirAPartida', { email: userEmail, codigo: codigoInput });
     };
 
-    const abandonar = () => {
-        if (socket) {
-            socket.emit('abandonarPartida', {
-                email: userEmail,
-                codigo: codigoPartida
-            });
-            setCodigoPartida(''); // Limpiamos el código en el front
-            // setStatusMsj('Has abandonado la partida'); // Opcional si tienes este estado
-        }
+    const colocarPiedra = (x, y) => {
+        // Solo si es tu turno
+        //console.log("CLICK EN:", x, y);
+        if (miColor !== estadoPartida.turno) return;
+        console.log("miColor:", miColor, "turno:", estadoPartida.turno);
+        // Emitimos al backend
+        socket.emit("colocarPiedra", { email: userEmail, codigo: codigoPartida, x, y });
     };
+
+
+    const abandonar = () => {
+        if (!socket) return;
+
+        socket.emit("abandonarPartida", {
+            email: userEmail,
+            codigo: codigoPartida
+        });
+
+        // RESET TOTAL DEL ESTADO DE LA PARTIDA
+        setCodigoPartida('');
+        setEnJuego(false);
+        setPartidaLista(false);
+        setEstadoPartida({
+            tablero: Array(9).fill(Array(9).fill(null)),
+            turno: null
+        });
+        setMiColor(null);
+    };
+
+    const iniciarPartidaIA = () => {
+        // Tablero vacío 9x9
+        const tableroInicial = Array(9).fill(null).map(() => Array(9).fill(0)); // usar 0 para vacío
+
+        setEstadoIA({
+            tablero: tableroInicial,
+            turno: 1, // humano empieza
+            capturas: { negro: 0, blanco: 0 }
+        });
+
+        setEnJuegoIA(true);     // activa render de IA
+        console.log("estadoIA después de iniciar:", tableroInicial);
+    };
+
     // ... (Todo tu código anterior de useEffects y funciones)
     useEffect(() => {
         if (!toastMsg) return;
@@ -148,17 +283,21 @@ export default function DashboardPage() {
 
     return (
         <div className="max-w-5xl mx-auto animate-in fade-in duration-700">
-            {/* --- CABECERA DINÁMICA --- */}
+
+            {/* ================= CABECERA ================= */}
             <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 tracking-tighter uppercase">
-                        {enJuego ? "🕹️ En Partida" : "🌐 Control de Partidas"}
+                        {enJuego || enJuegoIA ? "🕹️ En Partida" : "🌐 Control de Partidas"}
                     </h1>
                     <p className="text-gray-500 text-sm font-medium">{userEmail}</p>
                 </div>
+
                 {codigoPartida && (
                     <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Código Sala</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                            Código Sala
+                        </span>
                         <span className="text-2xl font-mono font-black text-indigo-600 tracking-widest leading-none">
                             {codigoPartida}
                         </span>
@@ -166,25 +305,94 @@ export default function DashboardPage() {
                 )}
             </div>
 
-            {/* --- CONTENIDO PRINCIPAL --- */}
-            {!enJuego ? (
-                /* VISTA LOBBY */
+            {/* ================= PARTIDA ONLINE ================= */}
+            {enJuego && (
+                <div className="bg-gray-900 rounded-[3rem] p-12 min-h-[400px]
+                      flex flex-col items-center justify-center
+                      border-[12px] border-gray-800 shadow-2xl">
+
+                    {!partidaLista && (
+                        <>
+                            <h2 className="text-white text-3xl font-black mb-8">
+                                Esperando al otro jugador...
+                            </h2>
+                            <button
+                                onClick={abandonar}
+                                className="mt-6 text-gray-400 hover:text-red-400 font-bold"
+                            >
+                                Abandonar partida
+                            </button>
+                        </>
+                    )}
+
+                    {partidaLista && (
+                        <>
+                            <GoBoard
+                                tablero={estadoPartida.tablero}
+                                turno={estadoPartida.turno}
+                                miColor={miColor}
+                                onClickCelda={colocarPiedra}
+                            />
+
+                            <button
+                                onClick={abandonar}
+                                className="mt-8 text-gray-400 hover:text-red-400 font-bold"
+                            >
+                                Abandonar partida
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* ================= PARTIDA IA ================= */}
+            {!enJuego && enJuegoIA && estadoIA && (
+                <div className="bg-gray-900 rounded-[3rem] p-12 min-h-[400px]
+                      flex flex-col items-center justify-center
+                      border-[12px] border-gray-800 shadow-2xl">
+                    <div className="flex gap-8 mb-6 text-white font-bold">
+                        <div>⚫ Negro: {estadoIA.capturas.negro}</div>
+                        <div>⚪ Blanco: {estadoIA.capturas.blanco}</div>
+                    </div>
+
+                    <GoBoardIA
+                        tablero={estadoIA.tablero}
+                        onClickCelda={colocarPiedraHumano}
+                    />
+
+                    <button
+                        onClick={() => setEnJuegoIA(false)}
+                        className="mt-8 text-gray-400 hover:text-red-400 font-bold"
+                    >
+                        Abandonar partida
+                    </button>
+                </div>
+            )}
+
+            {/* ================= LOBBY ================= */}
+            {!enJuego && !enJuegoIA && (
                 <div className="space-y-8">
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Tarjeta Crear */}
-                        <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                        {/* Crear partida */}
+                        <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
                             <h2 className="text-xl font-bold mb-4">Nueva Partida</h2>
-                            <p className="text-gray-500 mb-6 text-sm">Crea una sala privada y espera a que otros se unan.</p>
+                            <p className="text-gray-500 mb-6 text-sm">
+                                Crea una sala privada y espera a que otros se unan.
+                            </p>
                             <button
                                 onClick={crear}
                                 disabled={!!codigoPartida}
-                                className={`w-full py-4 rounded-xl font-bold transition-all ${codigoPartida ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 shadow-lg'}`}
+                                className={`w-full py-4 rounded-xl font-bold transition-all ${codigoPartida
+                                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 shadow-lg"
+                                    }`}
                             >
-                                {codigoPartida ? 'Esperando oponente...' : 'Crear Sala Ahora'}
+                                {codigoPartida ? "Esperando oponente..." : "Crear Sala Ahora"}
                             </button>
                         </div>
 
-                        {/* Tarjeta Unirse Manual */}
+                        {/* Unirse */}
                         <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
                             <h2 className="text-xl font-bold mb-4">Unirse con Código</h2>
                             <div className="flex gap-2">
@@ -193,11 +401,11 @@ export default function DashboardPage() {
                                     placeholder="EJ: AB1234"
                                     value={inputCodigo}
                                     onChange={(e) => setInputCodigo(e.target.value)}
-                                    className="flex-1 bg-gray-50 border-none rounded-xl px-4 font-mono font-bold focus:ring-2 focus:ring-indigo-500"
+                                    className="flex-1 bg-gray-50 rounded-xl px-4 font-mono font-bold"
                                 />
                                 <button
                                     onClick={() => unir()}
-                                    className="bg-gray-900 text-white px-6 py-4 rounded-xl font-bold hover:bg-black transition-colors"
+                                    className="bg-gray-900 text-white px-6 py-4 rounded-xl font-bold"
                                 >
                                     Ir
                                 </button>
@@ -205,71 +413,29 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    {/* LISTA DE PARTIDAS (Solo si no estamos esperando en una) */}
-                    {!codigoPartida && (
-                        <div className="pt-8">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                    Partidas Públicas
-                                </h3>
-                                <span className="text-xs font-bold text-gray-400">{listaPartidas.length} Disponibles</span>
-                            </div>
-
-                            {listaPartidas.length === 0 ? (
-                                <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl py-12 text-center text-gray-400">
-                                    No hay partidas activas en este momento.
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {listaPartidas.map((partida, idx) => {
-                                        const codigo = typeof partida === 'object' ? partida.codigo : partida;
-                                        return (
-                                            <div key={idx} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-indigo-300 transition-colors">
-                                                <span className="font-mono font-bold text-lg text-gray-700">{codigo}</span>
-                                                <button
-                                                    onClick={() => unir(codigo)}
-                                                    className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg font-bold text-sm group-hover:bg-indigo-600 group-hover:text-white transition-all"
-                                                >
-                                                    Unirse
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            ) : (
-                /* VISTA JUEGO ACTIVO */
-                <div className="bg-gray-900 rounded-[3rem] p-12 min-h-[400px] flex flex-col items-center justify-center border-[12px] border-gray-800 shadow-2xl relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
-
-                    <h2 className="text-white text-3xl font-black mb-8 z-10">EL JUEGO HA COMENZADO</h2>
-
-                    {/* Placeholder del Tablero */}
-                    <div className="w-64 h-64 bg-gray-800 rounded-2xl border-4 border-indigo-500/30 flex items-center justify-center z-10">
-                        <p className="text-indigo-400 font-mono text-xs animate-pulse text-center p-4">
-                            [ ESPERANDO LÓGICA DEL TABLERO ]
-                        </p>
+                    {/* IA */}
+                    <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+                        <h2 className="text-xl font-bold mb-4">Partida contra la Máquina</h2>
+                        <p className="text-gray-500 mb-6 text-sm">Juega un Go 9x9 contra la IA local.</p>
+                        <button
+                            onClick={iniciarPartidaIA}
+                            className="w-full py-4 rounded-xl font-bold bg-green-600 text-white hover:bg-green-700 shadow-green-200 shadow-lg"
+                        >
+                            Jugar ahora
+                        </button>
                     </div>
 
-                    <button
-                        onClick={abandonar}
-                        className="mt-12 text-gray-400 hover:text-red-400 font-bold transition-colors z-10"
-                    >
-                        Salir de la partida
-                    </button>
                 </div>
             )}
-            {/* 🔔 TOAST */}
+
+            {/* ================= TOAST ================= */}
             {toastMsg && (
-                <div className="fixed top-6 right-6 z-50 bg-gray-900 text-white px-6 py-3 rounded-xl shadow-xl animate-in fade-in duration-300">
+                <div className="fixed top-6 right-6 z-50 bg-gray-900 text-white px-6 py-3 rounded-xl shadow-xl">
                     {toastMsg}
                 </div>
             )}
-        </div>
 
+        </div>
     );
+
 }
