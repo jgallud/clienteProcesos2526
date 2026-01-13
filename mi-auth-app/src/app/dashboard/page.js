@@ -11,7 +11,7 @@ import { simularJugada } from "@/game/goUtils";
 
 export default function DashboardPage() {
     const [userEmail, setUserEmail] = useState("");
-    const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+    const url = process.env.urlConfirmar;
 
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -89,33 +89,19 @@ export default function DashboardPage() {
     useEffect(() => {
         const comprobarAcceso = async () => {
             try {
-                const res = await fetch(`${API_URL}/dashboard?t=${new Date().getTime()}`, {
+                const res = await fetch(`/verificarSesion`, {
                     method: 'GET',
                     credentials: 'include',
                     cache: 'no-store',
                 });
-
+                //console.log("Respuesta verificarSesion:", res);
                 if (res.ok) {
                     const data = await res.json();
-
-                    // 1. Usa los datos que vienen del servidor, son más fiables que la cookie
+                    console.log("Datos de usuario:", data);
                     setUser(data.user);
-                    // data.user debería traer el email o nick si lo configuraste en el back
-                    setUserEmail(data.user.email || data.user.nick || "");
-                    const nickDesdeCookie = document.cookie
-                        .split('; ')
-                        .find(row => row.startsWith('nick='))
-                        ?.split('=')[1];
-
-                    setUserEmail(decodeURIComponent(nickDesdeCookie || data.user.email));
-                    //setLoading(false);
-                    // 2. SOLO ahora permitimos ver el dashboard
+                    setUserEmail(data.user.email);
                     setLoading(false);
-                    // --- AQUÍ CONECTAMOS EL SOCKET ---
-                    // Solo cuando sabemos que el usuario es válido
-
                 } else {
-                    // Si no es OK (401), mandamos al login y NO quitamos el loading
                     router.push('/');
                 }
             } catch (error) {
@@ -125,7 +111,8 @@ export default function DashboardPage() {
         };
 
         comprobarAcceso();
-    }, [router, socket]);
+    }, [socket]); // <--- Ejecutar al montar, no depende de socket
+
     // --- NUEVO EFFECT: ESCUCHA DE EVENTOS ---
     // Este useEffect se encarga solo de "oír" lo que dice el servidor
     useEffect(() => {

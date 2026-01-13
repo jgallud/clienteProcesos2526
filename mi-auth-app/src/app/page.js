@@ -8,7 +8,7 @@ export default function AuthPage() {
   const [formData, setFormData] = useState({ email: '', password: '' });
 
   // Acceso a la variable de entorno
-  const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+ //const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -22,18 +22,19 @@ export default function AuthPage() {
     const endpoint = isLogin ? '/loginUsuario' : '/registrarUsuario';
     
     try {
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      const res = await fetch(`${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
         credentials: 'include'
       });
       const data = await res.json();
+      console.log('Respuesta:', data);
       if (res.ok && data.user!=-1) {
         //const data = await res.json();
         //alert(isLogin ? '¡Inicio de sesión exitoso!' : 'Cuenta creada correctamente');
         window.location.href = '/dashboard';
-        console.log('Respuesta:', data);
+        
       } else {
         toast('Error en la autenticación. Revisa tus datos.');
       }
@@ -45,7 +46,7 @@ export default function AuthPage() {
 
   const handleGoogleAuth = () => {
     // Redirección directa al endpoint get del backend
-    window.location.href = `${API_URL}/auth/google`;
+    window.location.href = `/auth/google`;
   };
 
   return (

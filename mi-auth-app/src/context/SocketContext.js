@@ -9,7 +9,7 @@ export const SocketProvider = ({ children }) => {
 
     useEffect(() => {
         // 1. Crear la instancia solo una vez al montar
-        const URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
+        const URL =  "/";
         const socketInstance = io(URL, {
             withCredentials: true,
             autoConnect: true,
