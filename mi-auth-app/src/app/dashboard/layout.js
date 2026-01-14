@@ -9,7 +9,7 @@ export default function DashboardLayout({ children }) {
 
   const handleLogout = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/cerrarSesion`, {
+      const res = await fetch("/cerrarSesion", {
         method: 'POST',
         credentials: 'include',
       });
