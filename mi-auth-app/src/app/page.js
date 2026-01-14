@@ -33,7 +33,7 @@ export default function AuthPage() {
       if (res.ok && data.user!=-1) {
         //const data = await res.json();
         //alert(isLogin ? '¡Inicio de sesión exitoso!' : 'Cuenta creada correctamente');
-        window.location.href = '/dashboard';
+        window.location.href = '/dashboard.html';
         
       } else {
         toast('Error en la autenticación. Revisa tus datos.');

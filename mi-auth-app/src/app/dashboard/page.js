@@ -82,24 +82,27 @@ export default function DashboardPage() {
         });
     }
 
-
-
-
-
     useEffect(() => {
         const comprobarAcceso = async () => {
             try {
-                const res = await fetch(`/verificarSesion`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    cache: 'no-store',
-                });
-                //console.log("Respuesta verificarSesion:", res);
-                if (res.ok) {
-                    const data = await res.json();
-                    console.log("Datos de usuario:", data);
-                    setUser(data.user);
-                    setUserEmail(data.user.email);
+                // const res = await fetch(`/verificarSesion`, {
+                //     method: 'GET',
+                //     credentials: 'include',
+                //     cache: 'no-store',
+                // });
+                const res = document.cookie.includes("email");
+                const cookies = Object.fromEntries(
+                    document.cookie.split("; ").map(c => {
+                        const [key, value] = c.split("=");
+                        return [key, decodeURIComponent(value)];
+                    })
+                );
+                console.log("Cookies en dashboard:", cookies);
+                if (res) {
+                    const user = cookies;
+                    console.log("Datos de usuario:", cookies);
+                    setUser(user);
+                    setUserEmail(user.email);
                     setLoading(false);
                 } else {
                     router.push('/');
