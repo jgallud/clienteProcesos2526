@@ -11,6 +11,7 @@ export default function DashboardLayout({ children }) {
     try {
       const res = await fetch("/cerrarSesion", {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
       if (res.ok) {

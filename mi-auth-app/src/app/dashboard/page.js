@@ -25,7 +25,7 @@ export default function DashboardPage() {
     const [partidaLista, setPartidaLista] = useState(false);
     const [estadoPartida, setEstadoPartida] = useState({
         tablero: Array(9).fill(null).map(() => Array(9).fill(0)),
-        turno: "black"
+        turno: "1"
     });
     const [miColor, setMiColor] = useState("black"); // asignado al crear/unir
     // estado del juego local vs IA
@@ -317,6 +317,19 @@ export default function DashboardPage() {
 
                     {partidaLista && (
                         <>
+                            {/* ===== Indicador de Turno ===== */}
+                            <div className="flex items-center gap-3 mb-6">
+                                <div
+                                    className="w-6 h-6 rounded-full"
+                                    style={{
+                                        backgroundColor: estadoPartida.turno === 1 ? "black" : "white",
+                                        border: estadoPartida.turno === 2 ? "1px solid #333" : "none",
+                                    }}
+                                />
+                                <span className="text-white font-bold text-lg">
+                                    Turno: {estadoPartida.turno === 1 ? "Negras" : "Blancas"}
+                                </span>
+                            </div>
                             <GoBoard
                                 tablero={estadoPartida.tablero}
                                 turno={estadoPartida.turno}
@@ -394,7 +407,7 @@ export default function DashboardPage() {
                                     className="flex-1 bg-gray-50 rounded-xl px-4 font-mono font-bold"
                                 />
                                 <button
-                                    onClick={() => unir()}
+                                    onClick={() => unir(inputCodigo)}
                                     className="bg-gray-900 text-white px-6 py-4 rounded-xl font-bold"
                                 >
                                     Ir
