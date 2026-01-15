@@ -25,7 +25,7 @@ export default function DashboardPage() {
     const [partidaLista, setPartidaLista] = useState(false);
     const [estadoPartida, setEstadoPartida] = useState({
         tablero: Array(9).fill(null).map(() => Array(9).fill(0)),
-        turno: "1"
+        turno: "1",
     });
     const [miColor, setMiColor] = useState("black"); // asignado al crear/unir
     // estado del juego local vs IA
@@ -329,7 +329,7 @@ export default function DashboardPage() {
                                 <span className="text-white font-bold text-lg">
                                     Turno: {estadoPartida.turno === 1 ? "Negras" : "Blancas"}
                                 </span>
-                            </div>
+                            </div>                           
                             <GoBoard
                                 tablero={estadoPartida.tablero}
                                 turno={estadoPartida.turno}
