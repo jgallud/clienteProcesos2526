@@ -26,6 +26,10 @@ export default function DashboardPage() {
     const [estadoPartida, setEstadoPartida] = useState({
         tablero: Array(9).fill(null).map(() => Array(9).fill(0)),
         turno: "1",
+        capturas: {
+            negro: 0,
+            blanco: 0,
+        },
     });
     const [miColor, setMiColor] = useState("black"); // asignado al crear/unir
     // estado del juego local vs IA
@@ -151,7 +155,7 @@ export default function DashboardPage() {
             setEnJuego(true);
             setPartidaLista(true);
             //setEstadoPartida(data);
-            setEstadoPartida({ tablero: data.tablero, turno: data.turno });
+            setEstadoPartida({ tablero: data.tablero, turno: data.turno, capturas: data.capturas });
             //setMiColor(data.miColor);
         });
 
@@ -317,19 +321,29 @@ export default function DashboardPage() {
 
                     {partidaLista && (
                         <>
+                            {/* ===== MARCADOR DE CAPTURAS ===== */}
+                            <div className="flex gap-8 mb-4 text-white font-bold text-lg">
+                                <div>⚫ Negro: {estadoPartida.capturas?.negro ?? 0}</div>
+                                <div>⚪ Blanco: {estadoPartida.capturas?.blanco ?? 0}</div>
+                            </div>
                             {/* ===== Indicador de Turno ===== */}
                             <div className="flex items-center gap-3 mb-6">
                                 <div
                                     className="w-6 h-6 rounded-full"
                                     style={{
-                                        backgroundColor: estadoPartida.turno === 1 ? "black" : "white",
-                                        border: estadoPartida.turno === 2 ? "1px solid #333" : "none",
+                                        backgroundColor: estadoPartida.turno === "black" ? "#000" : "#fff",
+                                        border: "2px solid #999",
+                                        boxShadow:
+                                            estadoPartida.turno === "black"
+                                                ? "0 0 0 2px #fff"
+                                                : "0 0 0 2px #000",
                                     }}
                                 />
                                 <span className="text-white font-bold text-lg">
-                                    Turno: {estadoPartida.turno === 1 ? "Negras" : "Blancas"}
+                                    Turno: {estadoPartida.turno === "black" ? "Negras" : "Blancas"}
                                 </span>
-                            </div>                           
+                            </div>
+
                             <GoBoard
                                 tablero={estadoPartida.tablero}
                                 turno={estadoPartida.turno}
