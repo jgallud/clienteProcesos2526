@@ -228,6 +228,26 @@ export default function DashboardPage() {
         socket.emit("colocarPiedra", { email: userEmail, codigo: codigoPartida, x, y });
     };
 
+    const pasarTurno = () => {
+        if (!socket) return;
+        if (miColor !== estadoPartida.turno) return;
+
+        socket.emit("pasarTurno", {
+            email: userEmail,
+            codigo: codigoPartida
+        });
+    };
+
+    const pasarTurnoIA = () => {
+        //if (!socket) return;
+        if (miColor !== estadoIA.turno) return;
+        setEstadoIA(prev => ({
+            ...prev,
+            turno: prev.turno === 1 ? 2 : 1,
+            pasesConsecutivos: prev.pasesConsecutivos + 1,
+        }));
+    };
+
 
     const abandonar = () => {
         if (!socket) return;
@@ -243,6 +263,7 @@ export default function DashboardPage() {
         setPartidaLista(false);
         setEstadoPartida({
             tablero: Array(9).fill(Array(9).fill(null)),
+            pasesConsecutivos: 0,
             turno: null
         });
         setMiColor(null);
@@ -255,7 +276,8 @@ export default function DashboardPage() {
         setEstadoIA({
             tablero: tableroInicial,
             turno: 1, // humano empieza
-            capturas: { negro: 0, blanco: 0 }
+            capturas: { negro: 0, blanco: 0 },
+            pasesConsecutivos: 0,
         });
 
         setEnJuegoIA(true);     // activa render de IA
@@ -343,6 +365,22 @@ export default function DashboardPage() {
                                     Turno: {estadoPartida.turno === "black" ? "Negras" : "Blancas"}
                                 </span>
                             </div>
+                            {/* BOTÓN PASAR */}
+                            <button
+                                onClick={pasarTurno}
+                                disabled={
+                                    estadoPartida.finalizada ||
+                                    miColor !== estadoPartida.turno
+                                }
+                                className="
+      px-4 py-2
+      bg-gray-700 text-white rounded
+      hover:bg-gray-600
+      disabled:opacity-40 disabled:cursor-not-allowed
+    "
+                            >
+                                Pasar
+                            </button>
 
                             <GoBoard
                                 tablero={estadoPartida.tablero}
@@ -371,6 +409,39 @@ export default function DashboardPage() {
                         <div>⚫ Negro: {estadoIA.capturas.negro}</div>
                         <div>⚪ Blanco: {estadoIA.capturas.blanco}</div>
                     </div>
+                     {/* ===== Indicador de Turno ===== */}
+                            <div className="flex items-center gap-3 mb-6">
+                                <div
+                                    className="w-6 h-6 rounded-full"
+                                    style={{
+                                        backgroundColor: estadoIA.turno === 1 ? "#000" : "#fff",
+                                        border: "2px solid #999",
+                                        boxShadow:
+                                            estadoIA.turno === 1
+                                                ? "0 0 0 2px #fff"
+                                                : "0 0 0 2px #000",
+                                    }}
+                                />
+                                <span className="text-white font-bold text-lg">
+                                    Turno: {estadoIA.turno === "black" ? "Negras" : "Blancas"}
+                                </span>
+                            </div>
+                    {/* BOTÓN PASAR */}
+                    <button
+                        onClick={pasarTurnoIA}
+                        disabled={
+                            estadoIA.finalizada ||
+                            miColor !== estadoIA.turno
+                        }
+                        className="
+      px-4 py-2
+      bg-gray-700 text-white rounded
+      hover:bg-gray-600
+      disabled:opacity-40 disabled:cursor-not-allowed
+    "
+                    >
+                        Pasar
+                    </button>
 
                     <GoBoardIA
                         tablero={estadoIA.tablero}
